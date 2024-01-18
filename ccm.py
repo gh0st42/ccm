@@ -20,7 +20,7 @@ class ContactState(Enum):
   POST = 2
 
 class CoreContact(object):
-  def __init__(self, timespan : Tuple[int, int], nodes : Tuple[int, int], bw : int, loss : float, delay : float, jitter : float) -> None:
+  def __init__(self, timespan : Tuple[int, int], nodes : Tuple[str, str], bw : int, loss : float, delay : float, jitter : float) -> None:
       self.timespan = timespan
       self.nodes = nodes
       self.bw = bw
@@ -41,7 +41,7 @@ class CoreContact(object):
     if len(fields) != 8:
       raise ValueError("Invalid CoreContact line: %s" % line)
     timespan = (int(fields[0]), int(fields[1]))
-    nodes = (int(fields[2]), int(fields[3]))
+    nodes = (fields[2], fields[3])
     bw = int(fields[4])
     loss = float(fields[5])
     delay = int(fields[6])
@@ -84,7 +84,7 @@ class CoreContactPlan(object):
       """Returns the list of contacts at the given time.
       """
       return [(c,s) for c, s in self.contacts.items() if c.timespan[0] <= time and c.timespan[1] >= time]
-
+    
     def need_activation(self, time : int) -> List[Tuple[CoreContact, ContactState]]:
       """Returns the list of contacts at the given time that need to be activated.
       """
@@ -143,6 +143,30 @@ session = core.get_session(sess_id)
 links = session.links
 nodes = session.nodes
 
+links = []
+for link in cp.contacts:
+  if link.nodes[0].isdigit():
+    node1 = int(link.nodes[0])
+  else:
+    node1 = [n for n in nodes.values() if n.name == link.nodes[0]][0].id
+
+  if link.nodes[1].isdigit():
+    node2 = int(link.nodes[1])
+  else:
+    node2 = [n for n in nodes.values() if n.name == link.nodes[1]][0].id
+
+  link_obj = find_link(session.links, node1, node2)
+  if link_obj is None:
+    print("WARNING: Link not found for %d, %d" % (node1, node2))
+    continue
+  if not link_obj in links:
+    links.append(link_obj)
+    link_obj.options.loss = 100
+    core.edit_link(sess_id, link_obj, None)
+
+
+print("Total number of links in plan: %r / total number of contacts for links: %r" % (len(links), len(cp.contacts)))
+
 while True:
   if cp.next_activation(cur_time) == None and cp.next_deactivation(cur_time) == None:
     if cp.loop or args.loop:
@@ -162,8 +186,16 @@ while True:
   cur_time = next_event
   for contact, state in cp.need_activation(cur_time):
     print("[ %d ] Activating %s" % (cur_time, contact))
-    node1 = contact.nodes[0]
-    node2 = contact.nodes[1]
+    if contact.nodes[0].isdigit():
+      node1 = int(contact.nodes[0])
+    else:
+      node1 = [n for n in nodes.values() if n.name == contact.nodes[0]][0].id
+
+    if contact.nodes[1].isdigit():
+      node2 = int(contact.nodes[1])
+    else:
+      node2 = [n for n in nodes.values() if n.name == contact.nodes[1]][0].id
+
     link = find_link(links, node1, node2)
     if link is None:
       print("WARNING: Link not found for %d, %d" % (node1, node2))
@@ -178,8 +210,17 @@ while True:
   
   for contact, state in cp.need_deactivation(cur_time):
     print("[ %d ] Deactivating %s" % (cur_time, contact))
-    node1 = contact.nodes[0]
-    node2 = contact.nodes[1]
+
+    if contact.nodes[0].isdigit():
+      node1 = int(contact.nodes[0])
+    else:
+      node1 = [n for n in nodes.values() if n.name == contact.nodes[0]][0].id
+
+    if contact.nodes[1].isdigit():
+      node2 = int(contact.nodes[1])
+    else:
+      node2 = [n for n in nodes.values() if n.name == contact.nodes[1]][0].id
+
     link = find_link(links, node1, node2)
     if link is None:
       print("WARNING: Link not found for %d, %d" % (node1, node2))
